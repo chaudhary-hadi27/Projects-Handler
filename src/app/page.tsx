@@ -120,29 +120,36 @@ export default function HomePage() {
 
     // Close menu when clicking outside
     useEffect(() => {
-        const handleClickOutside = () => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            // Don't close if clicking inside the dropdown menu
+            if (target.closest('.category-dropdown')) {
+                return;
+            }
             setCategoryMenuOpen(null);
             if (window.innerWidth >= 768) {
                 setMobileMenuOpen(false);
             }
         };
         if (categoryMenuOpen || mobileMenuOpen) {
-            window.addEventListener('click', handleClickOutside);
-            return () => window.removeEventListener('click', handleClickOutside);
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
         }
     }, [categoryMenuOpen, mobileMenuOpen]);
 
-    // Handle window resize
+    // Handle window resize - keep sidebar expanded on mobile
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth < 768) {
-                setSidebarCollapsed(true);
+            // Don't auto-collapse on mobile, let it stay expanded when opened
+            if (window.innerWidth >= 768) {
+                // Only manage collapse state on desktop
+                setSidebarCollapsed(sidebarCollapsed);
             }
         };
         handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [sidebarCollapsed]);
 
     // Actions
     const handleSubmit = async (e: React.FormEvent) => {
@@ -303,19 +310,19 @@ export default function HomePage() {
             </header>
 
             {/* Sidebar */}
-            <aside className={`fixed top-0 left-0 h-screen bg-white shadow-lg transition-all duration-300 z-40 
+            <aside className={`fixed top-0 left-0 h-screen bg-white shadow-lg transition-all duration-300 z-40 overflow-hidden
                 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-                ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+                ${sidebarCollapsed ? 'md:w-16' : 'w-72 md:w-64'}`}>
                 {/* Toggle Button (Desktop Only) */}
                 <button
                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    className="hidden md:block absolute -right-3 top-6 bg-white border border-gray-300 rounded-full p-1.5 shadow-md z-50"
+                    className="hidden md:flex absolute -right-3 top-6 bg-white border-2 border-gray-300 rounded-full p-1.5 shadow-lg hover:shadow-xl hover:border-indigo-400 transition-all z-50 items-center justify-center"
                 >
-                    {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                    {sidebarCollapsed ? <ChevronRight size={16} className="text-gray-700" /> : <ChevronLeft size={16} className="text-gray-700" />}
                 </button>
 
                 {/* Logo */}
-                <div className="p-4 border-b">
+                <div className="p-4 border-b flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-2 rounded-lg">
                             <FolderOpen className="text-white" size={20} />
@@ -330,7 +337,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Navigation */}
-                <nav className="p-3 space-y-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
+                <nav className="p-3 space-y-1 overflow-y-auto overflow-x-hidden sidebar-nav">
                     {/* All Projects */}
                     <button
                         onClick={() => {
@@ -339,7 +346,7 @@ export default function HomePage() {
                         }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'all' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
-                        <Home size={18} />
+                        <Home size={18} className="flex-shrink-0" />
                         {!sidebarCollapsed && (
                             <>
                                 <span className="font-medium">All Projects</span>
@@ -358,7 +365,7 @@ export default function HomePage() {
                         }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'favorites' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
-                        <Star size={18} fill={selectedCategory === 'favorites' ? '#4f46e5' : 'none'} />
+                        <Star size={18} fill={selectedCategory === 'favorites' ? '#4f46e5' : 'none'} className="flex-shrink-0" />
                         {!sidebarCollapsed && (
                             <>
                                 <span className="font-medium">Favorites</span>
@@ -377,7 +384,7 @@ export default function HomePage() {
                         }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'fav-categories' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
-                        <Heart size={18} />
+                        <Heart size={18} className="flex-shrink-0" />
                         {!sidebarCollapsed && (
                             <>
                                 <span className="font-medium">Fav Categories</span>
@@ -414,54 +421,80 @@ export default function HomePage() {
                         return (
                             <div
                                 key={cat.id}
-                                className={`relative group flex items-center p-2 rounded-lg ${selectedCategory === cat.name ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
+                                className={`relative group flex items-center gap-2 p-2.5 rounded-lg ${selectedCategory === cat.name ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                             >
                                 <button
                                     onClick={() => {
                                         setSelectedCategory(cat.name);
                                         setMobileMenuOpen(false);
                                     }}
-                                    className="flex-1 flex items-center gap-3 text-left"
+                                    className="flex-1 flex items-center gap-2.5 text-left min-w-0 overflow-hidden"
+                                    title={sidebarCollapsed ? `${cat.name} (${count})` : ''}
                                 >
-                                    <FolderOpen size={16} />
+                                    <FolderOpen size={18} className="flex-shrink-0" />
                                     {!sidebarCollapsed && (
-                                        <>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="truncate font-medium">{cat.name}</span>
-                                                    {isFavCat && (
-                                                        <Heart size={12} className="text-red-500 fill-current" />
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-gray-500">{count} projects</div>
+                                        <div className="flex-1 min-w-0 overflow-hidden pr-1">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                <span className="block truncate font-medium text-sm leading-tight">
+                                                    {cat.name}
+                                                </span>
+                                                {isFavCat && (
+                                                    <Heart size={12} className="text-red-500 fill-current flex-shrink-0" />
+                                                )}
                                             </div>
-                                        </>
+                                            <div className="text-xs text-gray-500 leading-tight">
+                                                {count} {count === 1 ? 'project' : 'projects'}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {sidebarCollapsed && (
+                                        <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                                            {cat.name} ({count})
+                                        </div>
                                     )}
                                 </button>
 
+                                {/* Count Badge for Collapsed Sidebar - positioned inside the button */}
+                                {sidebarCollapsed && (
+                                    <div className="absolute top-1.5 right-1.5 bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight font-medium">
+                                        {count}
+                                    </div>
+                                )}
+
+                                {/* Favorite Indicator for Collapsed Sidebar - positioned inside the button */}
+                                {sidebarCollapsed && isFavCat && (
+                                    <div className="absolute bottom-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></div>
+                                )}
+
+                                {/* 3-dot Menu Button (show on mobile and desktop hover) */}
                                 {!sidebarCollapsed && (
-                                    <div className="relative">
+                                    <div className="relative flex-shrink-0">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setCategoryMenuOpen(categoryMenuOpen === cat.name ? null : cat.name);
                                             }}
-                                            className="p-1 hover:bg-gray-200 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="p-1.5 hover:bg-gray-200 active:bg-gray-300 rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all flex-shrink-0"
                                         >
-                                            <MoreVertical size={14} />
+                                            <MoreVertical size={16} />
                                         </button>
 
+                                        {/* Dropdown Menu */}
                                         {categoryMenuOpen === cat.name && (
-                                            <div className="absolute right-0 top-full mt-1 w-40 bg-white shadow-lg rounded-lg border z-50">
+                                            <div
+                                                className="category-dropdown fixed md:absolute right-4 md:right-0 top-auto md:top-full mt-1 w-48 bg-white shadow-xl rounded-lg border border-gray-200 z-[60]"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         toggleFavorite('category', cat.name);
+                                                        setCategoryMenuOpen(null);
                                                     }}
-                                                    className="w-full flex items-center gap-2 p-2 hover:bg-gray-50 text-left"
+                                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left border-b"
                                                 >
-                                                    <Heart size={14} fill={isFavCat ? '#ef4444' : 'none'} />
-                                                    <span>{isFavCat ? 'Unfavorite' : 'Favorite'}</span>
+                                                    <Heart size={16} fill={isFavCat ? '#ef4444' : 'none'} className={isFavCat ? 'text-red-500' : ''} />
+                                                    <span className="font-medium">{isFavCat ? 'Unfavorite' : 'Favorite'}</span>
                                                 </button>
                                                 <button
                                                     onClick={(e) => {
@@ -475,29 +508,26 @@ export default function HomePage() {
                                                         });
                                                         setShowModal(true);
                                                         setCategoryMenuOpen(null);
+                                                        setMobileMenuOpen(false);
                                                     }}
-                                                    className="w-full flex items-center gap-2 p-2 hover:bg-gray-50 text-left"
+                                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left border-b"
                                                 >
-                                                    <Edit2 size={14} />
-                                                    <span>Edit</span>
+                                                    <Edit2 size={16} className="text-blue-600" />
+                                                    <span className="font-medium">Edit</span>
                                                 </button>
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         deleteItem('category', cat.id!, cat.name);
                                                     }}
-                                                    className="w-full flex items-center gap-2 p-2 hover:bg-gray-50 text-left text-red-600"
+                                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left text-red-600"
                                                 >
-                                                    <Trash2 size={14} />
-                                                    <span>Delete</span>
+                                                    <Trash2 size={16} />
+                                                    <span className="font-medium">Delete</span>
                                                 </button>
                                             </div>
                                         )}
                                     </div>
-                                )}
-
-                                {sidebarCollapsed && isFavCat && (
-                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
                                 )}
                             </div>
                         );
@@ -525,23 +555,28 @@ export default function HomePage() {
                                 setShowModal(true);
                                 setMobileMenuOpen(false);
                             }}
-                            className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 mt-4"
+                            className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors mt-2"
                         >
-                            <Settings size={18} />
-                            <span className="font-medium">Settings</span>
+                            <Settings size={18} className="flex-shrink-0" />
+                            <span className="font-medium text-sm">Settings</span>
                         </button>
                     )}
 
                     {/* Install PWA Button */}
                     {installPrompt && (
-                        <div className={`pt-4 mt-4 border-t ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+                        <div className={`pt-4 mt-4 border-t border-gray-200 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
                             <button
                                 onClick={installPWA}
-                                className={`w-full flex items-center gap-3 p-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 ${sidebarCollapsed ? 'justify-center' : ''}`}
+                                className={`w-full flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md hover:shadow-lg transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center' : ''}`}
                             >
-                                <Download size={18} />
-                                {!sidebarCollapsed && <span className="font-medium">Install App</span>}
+                                <Download size={20} className="flex-shrink-0" />
+                                {!sidebarCollapsed && <span className="font-medium text-sm">Install App</span>}
                             </button>
+                            {!sidebarCollapsed && (
+                                <p className="text-xs text-gray-500 mt-2 text-center leading-relaxed">
+                                    Works offline • Auto-sync
+                                </p>
+                            )}
                         </div>
                     )}
                 </nav>
@@ -555,8 +590,19 @@ export default function HomePage() {
                 />
             )}
 
+            {/* Category Menu Overlay (Mobile) */}
+            {categoryMenuOpen && (
+                <div
+                    className="md:hidden fixed inset-0 bg-black bg-opacity-30 z-50"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setCategoryMenuOpen(null);
+                    }}
+                />
+            )}
+
             {/* Main Content */}
-            <main className={`transition-all duration-300 min-h-screen pt-16 md:pt-0 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
+            <main className={`transition-all duration-300 min-h-screen pt-16 md:pt-0 ${sidebarCollapsed ? 'md:ml-16' : 'ml-0 md:ml-64'}`}>
                 <header className="hidden md:block bg-white shadow p-4 sticky top-0 z-30">
                     <div className="flex justify-between items-center">
                         <div>
@@ -992,28 +1038,115 @@ export default function HomePage() {
                 .animate-fadeIn {
                     animation: fadeIn 0.2s ease-out;
                 }
-                
+
                 /* Smooth scrolling */
                 html {
                     scroll-behavior: smooth;
                 }
-                
+
                 /* iOS safe area */
                 @supports (padding: max(0px)) {
                     body {
                         padding-bottom: max(0px, env(safe-area-inset-bottom));
                     }
                 }
-                
+
                 /* Improve touch responsiveness */
                 * {
                     -webkit-tap-highlight-color: transparent;
                 }
-                
+
                 /* Better scrolling on mobile */
                 @media (max-width: 768px) {
                     body {
                         -webkit-overflow-scrolling: touch;
+                    }
+                }
+
+                /* Fix sidebar horizontal scroll */
+                aside {
+                    overflow-x: hidden !important;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                aside nav {
+                    overflow-x: hidden !important;
+                    overflow-y: auto !important;
+                    width: 100%;
+                    flex: 1;
+                    min-height: 0;
+                }
+
+                aside * {
+                    max-width: 100%;
+                }
+
+                /* Ensure category text is visible */
+                aside .truncate {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    display: block;
+                }
+
+                /* Better spacing for category items */
+                aside .group {
+                    min-height: 44px;
+                    position: relative;
+                    overflow: visible;
+                }
+
+                /* Ensure badges stay within collapsed sidebar bounds */
+                aside.w-16 .group {
+                    padding-right: 0.375rem;
+                }
+
+                aside.w-16 .group > div[class*="absolute"] {
+                    right: 0.375rem;
+                }
+
+                /* Custom scrollbar for sidebar */
+                aside nav::-webkit-scrollbar {
+                    width: 4px;
+                }
+
+                aside nav::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+
+                aside nav::-webkit-scrollbar-thumb {
+                    background: rgba(0, 0, 0, 0.2);
+                    border-radius: 2px;
+                }
+
+                aside nav::-webkit-scrollbar-thumb:hover {
+                    background: rgba(0, 0, 0, 0.3);
+                }
+
+                /* Proper sidebar navigation height calculation */
+                .sidebar-nav {
+                    height: calc(100vh - 73px);
+                    max-height: calc(100vh - 73px);
+                }
+
+                /* Mobile sidebar height */
+                @media (max-width: 768px) {
+                    .sidebar-nav {
+                        height: calc(100vh - 73px);
+                        max-height: calc(100vh - 73px);
+                    }
+                }
+
+                /* Mobile category dropdown positioning */
+                @media (max-width: 768px) {
+                    .category-dropdown {
+                        position: fixed !important;
+                        top: 50% !important;
+                        left: 50% !important;
+                        transform: translate(-50%, -50%) !important;
+                        right: auto !important;
+                        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
                     }
                 }
             `}</style>
