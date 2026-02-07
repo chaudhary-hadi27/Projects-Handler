@@ -21,8 +21,8 @@ export class AppDatabase extends Dexie {
     constructor() {
         super('SmartKodeDB');
         this.version(1).stores({
-            projects: '++id, title, category',
-            categories: '++id, name'
+            projects: '++id, title, category, createdAt',
+            categories: '++id, name, createdAt'
         });
     }
 }

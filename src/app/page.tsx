@@ -6,9 +6,9 @@ import { db, Project, Category } from '@/lib/database';
 import {
     Plus, X, Heart, Trash2, Edit2,
     ExternalLink, Maximize2, FolderOpen,
-    Globe, Star, Download,
-    MoreVertical, ChevronLeft, ChevronRight,
-    Home
+    Star, Download, MoreVertical, ChevronLeft,
+    ChevronRight, Home, Settings, RefreshCw,
+    Palette, Menu, Save
 } from 'lucide-react';
 
 // Default favorites structure
@@ -17,19 +17,31 @@ const DEFAULT_FAVORITES = {
     categories: [] as string[]
 };
 
+// Default settings structure
+const DEFAULT_SETTINGS = {
+    appName: 'SmartKode',
+    appSubtitle: 'Projects',
+    themeColor: '#4f46e5',
+    accentColor: '#9333ea'
+};
+
 export default function HomePage() {
     // State
     const [showModal, setShowModal] = useState(false);
-    const [modalType, setModalType] = useState<'project' | 'category'>('project');
+    const [modalType, setModalType] = useState<'project' | 'category' | 'settings'>('project');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [fullscreenProject, setFullscreenProject] = useState<Project | null>(null);
     const [form, setForm] = useState({ title: '', url: '', category: '', id: 0 });
     const [installPrompt, setInstallPrompt] = useState<any>(null);
     const [categoryMenuOpen, setCategoryMenuOpen] = useState<string | null>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
 
-    // Initialize favorites with default value
+    // Initialize favorites and settings
     const [favorites, setFavorites] = useState(DEFAULT_FAVORITES);
+    const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    const [tempSettings, setTempSettings] = useState(DEFAULT_SETTINGS);
 
     // Data
     const categories = useLiveQuery(() => db.categories.toArray());
@@ -66,18 +78,30 @@ export default function HomePage() {
             const favs = localStorage.getItem('favorites');
             if (favs) {
                 const parsed = JSON.parse(favs);
-                // Ensure the structure is correct
                 setFavorites({
                     projects: Array.isArray(parsed.projects) ? parsed.projects : [],
                     categories: Array.isArray(parsed.categories) ? parsed.categories : []
                 });
             } else {
-                // Initialize with empty arrays
                 setFavorites(DEFAULT_FAVORITES);
             }
         } catch (error) {
             console.error('Error loading favorites:', error);
             setFavorites(DEFAULT_FAVORITES);
+        }
+    }, []);
+
+    // Load settings from localStorage
+    useEffect(() => {
+        try {
+            const storedSettings = localStorage.getItem('appSettings');
+            if (storedSettings) {
+                const parsed = JSON.parse(storedSettings);
+                setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+                setTempSettings({ ...DEFAULT_SETTINGS, ...parsed });
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
         }
     }, []);
 
@@ -88,14 +112,37 @@ export default function HomePage() {
         }
     }, [favorites]);
 
+    // Update theme colors
+    useEffect(() => {
+        document.documentElement.style.setProperty('--theme-color', settings.themeColor);
+        document.documentElement.style.setProperty('--accent-color', settings.accentColor);
+    }, [settings]);
+
     // Close menu when clicking outside
     useEffect(() => {
-        const handleClickOutside = () => setCategoryMenuOpen(null);
-        if (categoryMenuOpen) {
+        const handleClickOutside = () => {
+            setCategoryMenuOpen(null);
+            if (window.innerWidth >= 768) {
+                setMobileMenuOpen(false);
+            }
+        };
+        if (categoryMenuOpen || mobileMenuOpen) {
             window.addEventListener('click', handleClickOutside);
             return () => window.removeEventListener('click', handleClickOutside);
         }
-    }, [categoryMenuOpen]);
+    }, [categoryMenuOpen, mobileMenuOpen]);
+
+    // Handle window resize
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 768) {
+                setSidebarCollapsed(true);
+            }
+        };
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Actions
     const handleSubmit = async (e: React.FormEvent) => {
@@ -107,12 +154,15 @@ export default function HomePage() {
                 } else {
                     await db.projects.add({ ...form, createdAt: new Date() });
                 }
-            } else {
+            } else if (modalType === 'category') {
                 if (form.id) {
                     await db.categories.update(form.id, { name: form.title });
                 } else {
                     await db.categories.add({ name: form.title, createdAt: new Date() });
                 }
+            } else if (modalType === 'settings') {
+                localStorage.setItem('appSettings', JSON.stringify(tempSettings));
+                setSettings(tempSettings);
             }
             setShowModal(false);
             resetForm();
@@ -185,6 +235,24 @@ export default function HomePage() {
         }
     };
 
+    const forceUpdate = async () => {
+        setIsUpdating(true);
+        try {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                await registration.update();
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Update failed:', error);
+            window.location.reload();
+        }
+    };
+
     const isFavorite = (type: 'project' | 'category', id: number | string) => {
         if (!favorites) return false;
 
@@ -201,12 +269,47 @@ export default function HomePage() {
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* Mobile Header */}
+            <header className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50 px-4 py-3">
+                <div className="flex items-center justify-between">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setMobileMenuOpen(!mobileMenuOpen);
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded-lg"
+                    >
+                        <Menu size={24} />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-1.5 rounded-lg">
+                            <FolderOpen className="text-white" size={18} />
+                        </div>
+                        <div>
+                            <h1 className="font-bold text-base">{settings.appName}</h1>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setModalType('settings');
+                            setTempSettings(settings);
+                            setShowModal(true);
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded-lg"
+                    >
+                        <Settings size={20} />
+                    </button>
+                </div>
+            </header>
+
             {/* Sidebar */}
-            <aside className={`fixed top-0 left-0 h-screen bg-white shadow-lg transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
-                {/* Toggle Button */}
+            <aside className={`fixed top-0 left-0 h-screen bg-white shadow-lg transition-all duration-300 z-40 
+                ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+                {/* Toggle Button (Desktop Only) */}
                 <button
                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    className="absolute -right-3 top-6 bg-white border border-gray-300 rounded-full p-1.5 shadow-md z-50"
+                    className="hidden md:block absolute -right-3 top-6 bg-white border border-gray-300 rounded-full p-1.5 shadow-md z-50"
                 >
                     {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
                 </button>
@@ -219,18 +322,21 @@ export default function HomePage() {
                         </div>
                         {!sidebarCollapsed && (
                             <div>
-                                <h1 className="font-bold text-lg">SmartKode</h1>
-                                <p className="text-xs text-gray-500">Projects</p>
+                                <h1 className="font-bold text-lg">{settings.appName}</h1>
+                                <p className="text-xs text-gray-500">{settings.appSubtitle}</p>
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Navigation */}
-                <nav className="p-3 space-y-1">
+                <nav className="p-3 space-y-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
                     {/* All Projects */}
                     <button
-                        onClick={() => setSelectedCategory('all')}
+                        onClick={() => {
+                            setSelectedCategory('all');
+                            setMobileMenuOpen(false);
+                        }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'all' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
                         <Home size={18} />
@@ -238,15 +344,18 @@ export default function HomePage() {
                             <>
                                 <span className="font-medium">All Projects</span>
                                 <span className="ml-auto bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
-                  {projects?.length || 0}
-                </span>
+                                    {projects?.length || 0}
+                                </span>
                             </>
                         )}
                     </button>
 
                     {/* Favorites */}
                     <button
-                        onClick={() => setSelectedCategory('favorites')}
+                        onClick={() => {
+                            setSelectedCategory('favorites');
+                            setMobileMenuOpen(false);
+                        }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'favorites' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
                         <Star size={18} fill={selectedCategory === 'favorites' ? '#4f46e5' : 'none'} />
@@ -254,15 +363,18 @@ export default function HomePage() {
                             <>
                                 <span className="font-medium">Favorites</span>
                                 <span className="ml-auto bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
-                  {favoriteProjectsCount}
-                </span>
+                                    {favoriteProjectsCount}
+                                </span>
                             </>
                         )}
                     </button>
 
                     {/* Favorite Categories */}
                     <button
-                        onClick={() => setSelectedCategory('fav-categories')}
+                        onClick={() => {
+                            setSelectedCategory('fav-categories');
+                            setMobileMenuOpen(false);
+                        }}
                         className={`w-full flex items-center gap-3 p-2.5 rounded-lg ${selectedCategory === 'fav-categories' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                     >
                         <Heart size={18} />
@@ -270,8 +382,8 @@ export default function HomePage() {
                             <>
                                 <span className="font-medium">Fav Categories</span>
                                 <span className="ml-auto bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
-                  {favoriteCategoriesCount}
-                </span>
+                                    {favoriteCategoriesCount}
+                                </span>
                             </>
                         )}
                     </button>
@@ -285,6 +397,7 @@ export default function HomePage() {
                                     setModalType('category');
                                     resetForm();
                                     setShowModal(true);
+                                    setMobileMenuOpen(false);
                                 }}
                                 className="p-1 hover:bg-gray-100 rounded"
                             >
@@ -304,7 +417,10 @@ export default function HomePage() {
                                 className={`relative group flex items-center p-2 rounded-lg ${selectedCategory === cat.name ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'hover:bg-gray-50'}`}
                             >
                                 <button
-                                    onClick={() => setSelectedCategory(cat.name)}
+                                    onClick={() => {
+                                        setSelectedCategory(cat.name);
+                                        setMobileMenuOpen(false);
+                                    }}
                                     className="flex-1 flex items-center gap-3 text-left"
                                 >
                                     <FolderOpen size={16} />
@@ -323,7 +439,6 @@ export default function HomePage() {
                                     )}
                                 </button>
 
-                                {/* 3-dot Menu Button (only show on hover when not collapsed) */}
                                 {!sidebarCollapsed && (
                                     <div className="relative">
                                         <button
@@ -336,7 +451,6 @@ export default function HomePage() {
                                             <MoreVertical size={14} />
                                         </button>
 
-                                        {/* Dropdown Menu */}
                                         {categoryMenuOpen === cat.name && (
                                             <div className="absolute right-0 top-full mt-1 w-40 bg-white shadow-lg rounded-lg border z-50">
                                                 <button
@@ -382,7 +496,6 @@ export default function HomePage() {
                                     </div>
                                 )}
 
-                                {/* Favorite indicator for collapsed sidebar */}
                                 {sidebarCollapsed && isFavCat && (
                                     <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
                                 )}
@@ -390,7 +503,6 @@ export default function HomePage() {
                         );
                     })}
 
-                    {/* Add Category Button (when collapsed) */}
                     {sidebarCollapsed && (
                         <button
                             onClick={() => {
@@ -404,6 +516,22 @@ export default function HomePage() {
                         </button>
                     )}
 
+                    {/* Settings Button */}
+                    {!sidebarCollapsed && (
+                        <button
+                            onClick={() => {
+                                setModalType('settings');
+                                setTempSettings(settings);
+                                setShowModal(true);
+                                setMobileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 mt-4"
+                        >
+                            <Settings size={18} />
+                            <span className="font-medium">Settings</span>
+                        </button>
+                    )}
+
                     {/* Install PWA Button */}
                     {installPrompt && (
                         <div className={`pt-4 mt-4 border-t ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
@@ -414,19 +542,22 @@ export default function HomePage() {
                                 <Download size={18} />
                                 {!sidebarCollapsed && <span className="font-medium">Install App</span>}
                             </button>
-                            {!sidebarCollapsed && (
-                                <p className="text-xs text-gray-500 mt-2 text-center">
-                                    Works offline • Auto-sync
-                                </p>
-                            )}
                         </div>
                     )}
                 </nav>
             </aside>
 
+            {/* Mobile Menu Overlay */}
+            {mobileMenuOpen && (
+                <div
+                    className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+                    onClick={() => setMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Main Content */}
-            <main className={`transition-all duration-300 min-h-screen ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
-                <header className="bg-white shadow p-4 sticky top-0 z-30">
+            <main className={`transition-all duration-300 min-h-screen pt-16 md:pt-0 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
+                <header className="hidden md:block bg-white shadow p-4 sticky top-0 z-30">
                     <div className="flex justify-between items-center">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">
@@ -471,49 +602,75 @@ export default function HomePage() {
                     </div>
                 </header>
 
+                {/* Mobile Action Buttons */}
+                <div className="md:hidden fixed bottom-6 right-4 flex flex-col gap-3 z-40">
+                    <button
+                        onClick={() => {
+                            setModalType('category');
+                            resetForm();
+                            setShowModal(true);
+                        }}
+                        className="p-4 bg-white border-2 border-gray-300 rounded-full shadow-lg active:scale-95 transition-transform"
+                    >
+                        <FolderOpen size={20} />
+                    </button>
+                    <button
+                        onClick={() => {
+                            setModalType('project');
+                            resetForm();
+                            setForm(f => ({
+                                ...f,
+                                category: selectedCategory !== 'all' &&
+                                selectedCategory !== 'favorites' &&
+                                selectedCategory !== 'fav-categories' ?
+                                    selectedCategory : ''
+                            }));
+                            setShowModal(true);
+                        }}
+                        className="p-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-lg active:scale-95 transition-transform"
+                    >
+                        <Plus size={24} />
+                    </button>
+                </div>
+
                 {/* Projects Grid */}
-                <div className="p-6">
+                <div className="p-4 md:p-6 pb-24 md:pb-6">
                     {filteredProjects && filteredProjects.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                             {filteredProjects.map(project => {
                                 const isFavProj = isFavorite('project', project.id!);
 
                                 return (
                                     <div key={project.id} className="bg-white rounded-xl shadow-lg border overflow-hidden hover:shadow-xl transition-shadow">
-                                        {/* Project Preview */}
-                                        <div className="h-48 bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
+                                        <div className="h-40 md:h-48 bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
                                             <iframe
                                                 src={project.url}
-                                                className="w-full h-full border-0"
+                                                className="w-full h-full border-0 pointer-events-none"
                                                 title={project.title}
                                                 sandbox="allow-scripts allow-same-origin"
                                             />
 
-                                            {/* Preview Controls */}
-                                            <div className="absolute top-3 right-3 flex gap-2">
+                                            <div className="absolute top-2 right-2 flex gap-2">
                                                 <button
                                                     onClick={() => toggleFavorite('project', project.id!)}
-                                                    className={`p-2 rounded-full ${isFavProj ? 'bg-red-500 text-white' : 'bg-black/20 text-white hover:bg-black/30'} backdrop-blur-sm`}
-                                                    title={isFavProj ? "Unfavorite" : "Favorite"}
+                                                    className={`p-2 rounded-full ${isFavProj ? 'bg-red-500 text-white' : 'bg-black/20 text-white hover:bg-black/30'} backdrop-blur-sm active:scale-95 transition-transform`}
                                                 >
-                                                    <Heart size={16} fill={isFavProj ? 'white' : 'none'} />
+                                                    <Heart size={14} fill={isFavProj ? 'white' : 'none'} />
                                                 </button>
                                                 <button
                                                     onClick={() => setFullscreenProject(project)}
-                                                    className="p-2 bg-black/20 text-white rounded-full backdrop-blur-sm hover:bg-black/30"
-                                                    title="Fullscreen Preview"
+                                                    className="p-2 bg-black/20 text-white rounded-full backdrop-blur-sm hover:bg-black/30 active:scale-95 transition-transform"
                                                 >
-                                                    <Maximize2 size={16} />
+                                                    <Maximize2 size={14} />
                                                 </button>
                                             </div>
                                         </div>
 
-                                        {/* Project Info */}
-                                        <div className="p-4">
+                                        <div className="p-3 md:p-4">
                                             <div className="flex justify-between items-start mb-3">
-                        <span className="px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 text-xs font-medium rounded-full">
-                          {project.category}
-                        </span>
+                                                <span className="px-2 md:px-3 py-1 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 text-xs font-medium rounded-full">
+                                                    {project.category}
+                                                </span>
                                                 <div className="flex gap-1">
                                                     <button
                                                         onClick={() => {
@@ -526,20 +683,20 @@ export default function HomePage() {
                                                             });
                                                             setShowModal(true);
                                                         }}
-                                                        className="p-1.5 hover:bg-blue-50 rounded-lg text-gray-600 hover:text-blue-600"
+                                                        className="p-1.5 hover:bg-blue-50 rounded-lg text-gray-600 hover:text-blue-600 active:scale-95 transition-transform"
                                                     >
-                                                        <Edit2 size={16} />
+                                                        <Edit2 size={14} />
                                                     </button>
                                                     <button
                                                         onClick={() => deleteItem('project', project.id!)}
-                                                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-600 hover:text-red-600"
+                                                        className="p-1.5 hover:bg-red-50 rounded-lg text-gray-600 hover:text-red-600 active:scale-95 transition-transform"
                                                     >
-                                                        <Trash2 size={16} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <h3 className="font-bold text-lg text-gray-900 mb-3">
+                                            <h3 className="font-bold text-base md:text-lg text-gray-900 mb-3">
                                                 {project.title}
                                             </h3>
 
@@ -547,7 +704,7 @@ export default function HomePage() {
                                                 href={project.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="block w-full text-center py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 font-medium transition-all"
+                                                className="block w-full text-center py-2.5 md:py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 font-medium transition-all active:scale-95"
                                             >
                                                 <ExternalLink className="inline mr-2" size={16} />
                                                 Visit Website
@@ -558,12 +715,12 @@ export default function HomePage() {
                             })}
                         </div>
                     ) : (
-                        <div className="text-center py-20">
-                            <FolderOpen className="mx-auto text-gray-300 mb-4" size={64} />
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                        <div className="text-center py-12 md:py-20">
+                            <FolderOpen className="mx-auto text-gray-300 mb-4" size={48} />
+                            <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
                                 No Projects Found
                             </h3>
-                            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                            <p className="text-gray-600 mb-6 max-w-md mx-auto px-4">
                                 {selectedCategory === 'all'
                                     ? "You haven't added any projects yet. Add your first project to get started!"
                                     : `No projects found in "${selectedCategory}"`}
@@ -573,7 +730,7 @@ export default function HomePage() {
                                     setModalType('project');
                                     setShowModal(true);
                                 }}
-                                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 font-medium shadow-lg"
+                                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 font-medium shadow-lg active:scale-95 transition-transform"
                             >
                                 Add New Project
                             </button>
@@ -582,95 +739,200 @@ export default function HomePage() {
                 </div>
             </main>
 
-            {/* Add/Edit Modal */}
+            {/* Modals */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900">
-                                {form.id ? 'Edit' : 'Add'} {modalType === 'project' ? 'Project' : 'Category'}
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-4 md:p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4 md:mb-6">
+                            <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                                {modalType === 'settings' ? 'Settings' : `${form.id ? 'Edit' : 'Add'} ${modalType === 'project' ? 'Project' : 'Category'}`}
                             </h2>
                             <button
                                 onClick={() => {
                                     setShowModal(false);
                                     resetForm();
                                 }}
-                                className="p-2 hover:bg-gray-100 rounded-lg"
+                                className="p-2 hover:bg-gray-100 rounded-lg active:scale-95 transition-transform"
                             >
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {modalType === 'project' ? 'Project Title' : 'Category Name'}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.title}
-                                    onChange={e => setForm({ ...form, title: e.target.value })}
-                                    placeholder={modalType === 'project' ? 'Enter project name...' : 'Enter category name...'}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                    required
-                                    autoFocus
-                                />
-                            </div>
+                        {modalType === 'settings' ? (
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        App Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={tempSettings.appName}
+                                        onChange={e => setTempSettings({ ...tempSettings, appName: e.target.value })}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                        required
+                                    />
+                                </div>
 
-                            {modalType === 'project' && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Project URL
-                                        </label>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        App Subtitle
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={tempSettings.appSubtitle}
+                                        onChange={e => setTempSettings({ ...tempSettings, appSubtitle: e.target.value })}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Theme Color
+                                    </label>
+                                    <div className="flex gap-2">
                                         <input
-                                            type="url"
-                                            value={form.url}
-                                            onChange={e => setForm({ ...form, url: e.target.value })}
-                                            placeholder="https://example.com"
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                            required
+                                            type="color"
+                                            value={tempSettings.themeColor}
+                                            onChange={e => setTempSettings({ ...tempSettings, themeColor: e.target.value })}
+                                            className="w-16 h-12 rounded-lg border border-gray-300 cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={tempSettings.themeColor}
+                                            onChange={e => setTempSettings({ ...tempSettings, themeColor: e.target.value })}
+                                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                                         />
                                     </div>
+                                </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Category
-                                        </label>
-                                        <select
-                                            value={form.category}
-                                            onChange={e => setForm({ ...form, category: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                                            required
-                                        >
-                                            <option value="">Select a category</option>
-                                            {categories?.map(cat => (
-                                                <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                            ))}
-                                        </select>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Accent Color
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="color"
+                                            value={tempSettings.accentColor}
+                                            onChange={e => setTempSettings({ ...tempSettings, accentColor: e.target.value })}
+                                            className="w-16 h-12 rounded-lg border border-gray-300 cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={tempSettings.accentColor}
+                                            onChange={e => setTempSettings({ ...tempSettings, accentColor: e.target.value })}
+                                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                        />
                                     </div>
-                                </>
-                            )}
+                                </div>
 
-                            <div className="flex gap-3 pt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowModal(false);
-                                        resetForm();
-                                    }}
-                                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-colors font-medium"
-                                >
-                                    {form.id ? 'Update' : 'Add'}
-                                </button>
-                            </div>
-                        </form>
+                                <div className="pt-4 border-t">
+                                    <button
+                                        type="button"
+                                        onClick={forceUpdate}
+                                        disabled={isUpdating}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 transition-colors font-medium disabled:opacity-50 active:scale-95 transition-transform"
+                                    >
+                                        <RefreshCw size={18} className={isUpdating ? 'animate-spin' : ''} />
+                                        {isUpdating ? 'Updating...' : 'Force Update App'}
+                                    </button>
+                                    <p className="text-xs text-gray-500 text-center mt-2">
+                                        Click to refresh and get the latest version
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setTempSettings(settings);
+                                        }}
+                                        className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium active:scale-95 transition-transform"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-colors font-medium active:scale-95 transition-transform"
+                                    >
+                                        <Save size={18} className="inline mr-2" />
+                                        Save
+                                    </button>
+                                </div>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {modalType === 'project' ? 'Project Title' : 'Category Name'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={form.title}
+                                        onChange={e => setForm({ ...form, title: e.target.value })}
+                                        placeholder={modalType === 'project' ? 'Enter project name...' : 'Enter category name...'}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+
+                                {modalType === 'project' && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Project URL
+                                            </label>
+                                            <input
+                                                type="url"
+                                                value={form.url}
+                                                onChange={e => setForm({ ...form, url: e.target.value })}
+                                                placeholder="https://example.com"
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Category
+                                            </label>
+                                            <select
+                                                value={form.category}
+                                                onChange={e => setForm({ ...form, category: e.target.value })}
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                                                required
+                                            >
+                                                <option value="">Select a category</option>
+                                                {categories?.map(cat => (
+                                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            resetForm();
+                                        }}
+                                        className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium active:scale-95 transition-transform"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-colors font-medium active:scale-95 transition-transform"
+                                    >
+                                        {form.id ? 'Update' : 'Add'}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}
@@ -679,33 +941,33 @@ export default function HomePage() {
             {fullscreenProject && (
                 <div className="fixed inset-0 bg-black z-50">
                     <div className="h-screen flex flex-col">
-                        <div className="bg-gray-900 text-white p-4 flex justify-between items-center">
-                            <div className="flex items-center gap-4">
-                                <h3 className="font-bold text-lg">{fullscreenProject.title}</h3>
-                                <span className="px-3 py-1 bg-gray-700 text-sm rounded-full">
-                  {fullscreenProject.category}
-                </span>
+                        <div className="bg-gray-900 text-white p-3 md:p-4 flex justify-between items-center">
+                            <div className="flex items-center gap-2 md:gap-4">
+                                <h3 className="font-bold text-sm md:text-lg truncate">{fullscreenProject.title}</h3>
+                                <span className="hidden md:block px-3 py-1 bg-gray-700 text-sm rounded-full">
+                                    {fullscreenProject.category}
+                                </span>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 md:gap-3">
                                 <button
                                     onClick={() => toggleFavorite('project', fullscreenProject.id!)}
-                                    className={`px-3 py-1.5 rounded-lg flex items-center gap-2 ${isFavorite('project', fullscreenProject.id!) ? 'bg-red-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                                    className={`px-2 md:px-3 py-1.5 rounded-lg flex items-center gap-2 active:scale-95 transition-transform ${isFavorite('project', fullscreenProject.id!) ? 'bg-red-600' : 'bg-gray-700 hover:bg-gray-600'}`}
                                 >
                                     <Heart size={16} fill={isFavorite('project', fullscreenProject.id!) ? 'white' : 'none'} />
-                                    {isFavorite('project', fullscreenProject.id!) ? 'Unfavorite' : 'Favorite'}
+                                    <span className="hidden md:inline">{isFavorite('project', fullscreenProject.id!) ? 'Unfavorite' : 'Favorite'}</span>
                                 </button>
                                 <a
                                     href={fullscreenProject.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-2"
+                                    className="px-2 md:px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-2 active:scale-95 transition-transform"
                                 >
                                     <ExternalLink size={16} />
-                                    Open in New Tab
+                                    <span className="hidden md:inline">Open</span>
                                 </a>
                                 <button
                                     onClick={() => setFullscreenProject(null)}
-                                    className="p-2 hover:bg-gray-800 rounded-lg"
+                                    className="p-2 hover:bg-gray-800 rounded-lg active:scale-95 transition-transform"
                                 >
                                     <X size={20} />
                                 </button>
@@ -721,17 +983,6 @@ export default function HomePage() {
                 </div>
             )}
 
-            {/* Floating Install Button */}
-            {installPrompt && (
-                <button
-                    onClick={installPWA}
-                    className="fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full shadow-lg hover:shadow-xl z-40"
-                >
-                    <Download size={20} />
-                    <span className="font-medium">Install App</span>
-                </button>
-            )}
-
             {/* CSS for animations */}
             <style jsx global>{`
                 @keyframes fadeIn {
@@ -740,6 +991,30 @@ export default function HomePage() {
                 }
                 .animate-fadeIn {
                     animation: fadeIn 0.2s ease-out;
+                }
+                
+                /* Smooth scrolling */
+                html {
+                    scroll-behavior: smooth;
+                }
+                
+                /* iOS safe area */
+                @supports (padding: max(0px)) {
+                    body {
+                        padding-bottom: max(0px, env(safe-area-inset-bottom));
+                    }
+                }
+                
+                /* Improve touch responsiveness */
+                * {
+                    -webkit-tap-highlight-color: transparent;
+                }
+                
+                /* Better scrolling on mobile */
+                @media (max-width: 768px) {
+                    body {
+                        -webkit-overflow-scrolling: touch;
+                    }
                 }
             `}</style>
         </div>
