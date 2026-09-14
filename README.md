@@ -1,4 +1,4 @@
-# SmartKode Projects - PWA Project Manager 🚀
+# Projects-Handler
 
 
 ![SmartKode](https://img.shields.io/badge/SmartKode-Projects-blue)
